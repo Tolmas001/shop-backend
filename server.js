@@ -560,6 +560,59 @@ app.post('/api/promo/validate', authenticateToken, async (req, res) => {
   }
 });
 
+// Admin: Get all promo codes
+app.get('/api/promo/admin', authenticateAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM promo_codes ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Create promo code
+app.post('/api/promo/admin', authenticateAdmin, async (req, res) => {
+  const { code, discount_percent, expiry_date, usage_limit } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO promo_codes (code, discount_percent, expiry_date, usage_limit) VALUES ($1, $2, $3, $4) RETURNING *',
+      [code.toUpperCase(), discount_percent, expiry_date || null, usage_limit || 100]
+    );
+    await logActivity(req.user.id, 'PROMO_CREATE', `Created promo code: ${code.toUpperCase()} (${discount_percent}%)`);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(400).json({ error: 'Promo-kod allaqachon mavjud' });
+  }
+});
+
+// Admin: Update promo code
+app.put('/api/promo/admin/:id', authenticateAdmin, async (req, res) => {
+  const { code, discount_percent, expiry_date, usage_limit, is_active } = req.body;
+  const { id } = req.params;
+  try {
+    await pool.query(
+      'UPDATE promo_codes SET code = $1, discount_percent = $2, expiry_date = $3, usage_limit = $4, is_active = $5 WHERE id = $6',
+      [code.toUpperCase(), discount_percent, expiry_date || null, usage_limit, is_active, id]
+    );
+    await logActivity(req.user.id, 'PROMO_UPDATE', `Updated promo code ID: ${id} (${code.toUpperCase()})`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Admin: Delete promo code
+app.delete('/api/promo/admin/:id', authenticateAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM promo_codes WHERE id = $1', [id]);
+    await logActivity(req.user.id, 'PROMO_DELETE', `Deleted promo code ID: ${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/orders', authenticateToken, async (req, res) => {
   const { customer_name, customer_phone, customer_address, items, payment_method, promo_code, use_points } = req.body;
   const user_id = req.user.id;
@@ -857,16 +910,30 @@ app.get('/auth/google/callback', async (req, res) => {
       const emailCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
       user = emailCheck.rows[0];
       
+      const targetAdminEmail = 'urinovtolmas20@gmail.com';
+      const role = email === targetAdminEmail ? 'admin' : 'user';
+
       if (user) {
-        await pool.query('UPDATE users SET google_id = $1, image = COALESCE(image, $2), full_name = COALESCE(full_name, $3) WHERE id = $4', [google_id, picture, name, user.id]);
+        await pool.query(
+          'UPDATE users SET google_id = $1, image = COALESCE(image, $2), full_name = COALESCE(full_name, $3), role = CASE WHEN email = $4 THEN $5 ELSE role END WHERE id = $6', 
+          [google_id, picture, name, targetAdminEmail, 'admin', user.id]
+        );
         user.google_id = google_id;
+        if (email === targetAdminEmail) user.role = 'admin';
       } else {
         const username = email.split('@')[0] + Math.floor(Math.random() * 1000);
         const { rows: newUserRows } = await pool.query(
           'INSERT INTO users (username, email, google_id, image, full_name, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-          [username, email, google_id, picture, name, 'user']
+          [username, email, google_id, picture, name, role]
         );
         user = newUserRows[0];
+      }
+    } else {
+      // User exists with google_id, but let's ensure role is correct if email is the target admin
+      const targetAdminEmail = 'urinovtolmas20@gmail.com';
+      if (user.email === targetAdminEmail && user.role !== 'admin') {
+        await pool.query('UPDATE users SET role = $1 WHERE id = $2', ['admin', user.id]);
+        user.role = 'admin';
       }
     }
     
