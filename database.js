@@ -12,7 +12,7 @@ const initializeDB = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL UNIQUE,
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -32,6 +32,7 @@ const initializeDB = async () => {
         stock_count INTEGER DEFAULT 0,
         likes JSONB DEFAULT '[]'::jsonb,
         comments JSONB DEFAULT '[]'::jsonb,
+        specifications JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);

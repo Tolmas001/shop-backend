@@ -97,6 +97,20 @@ async function ensureAdminExists() {
       );
     }
 
+    // Seed cream categories
+    const creamCategories = [
+      { name: 'Yuz kremlari', desc: 'Yuz terisi uchun maxsus kremlar' },
+      { name: 'Qo\'l kremlari', desc: 'Qo\'l va tirnoq parvarishi uchun' },
+      { name: 'Tana kremlari', desc: 'Tana terisini namlantiruvchi kremlar' },
+      { name: 'Quyoshdan himoya kremlari', desc: 'SPF himoya vositalari' }
+    ];
+    for (const cat of creamCategories) {
+      await pool.query(
+        'INSERT INTO categories (name, description) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [cat.name, cat.desc]
+      );
+    }
+
     return true;
   } catch (err) {
     console.error('❌ Error ensuring admin exists:', err.message);
@@ -152,14 +166,12 @@ async function logActivity(userId, action, details) {
 app.get('/api/auth/reset-admin', async (req, res) => {
   const success = await ensureAdminExists();
   if (success) {
+    const fUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.send(`
-      <div style="font-family: sans-serif; padding: 40px; text-align: center;">
-        <h1 style="color: #10B981;">✅ Admin account has been reset successfully!</h1>
-        <p>You can endter with:</p>
-        <p><b>Username:</b> ${process.env.ADMIN_USERNAME || 'admin'}</p>
-        <p><b>Password:</b> ${process.env.ADMIN_PASSWORD || 'admin123'}</p>
-        <br/>
-        <a href="http://localhost:3000/admin/login" style="background: #2563EB; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none;">Go to Login Page</a>
+      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h1 style="color: #2563EB;">ShopSRY API is Running</h1>
+        <p>Backend version 2.0.0 (Production Ready)</p>
+        <a href="${fUrl}/admin/login" style="background: #2563EB; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none;">Go to Login Page</a>
       </div>
     `);
   } else {
